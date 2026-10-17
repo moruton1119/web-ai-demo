@@ -67,10 +67,14 @@
     transition: width .3s ease;
   }
 </style>
-<!-- tokenizer (Xenova transformers.js v2) -->
+<!-- tokenizer + translation (Xenova transformers.js v2) -->
 <script type="module">
-  import { AutoTokenizer } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.js';
+  import { AutoTokenizer, AutoModelForSeq2SeqLM, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.js';
+  // 量子化ONNXでブラウザ内ローカル実行(秘密情報ゼロ・外部送信なし)
+  env.allowLocalModels = false;
   window.AutoTokenizer = AutoTokenizer;
+  window.AutoModelForSeq2SeqLM = AutoModelForSeq2SeqLM;
+  window.TranslationEnv = env;
 </script>
 </head>
 <body>
@@ -84,10 +88,10 @@
   </p>
 
   <div class="panel">
-    <textarea id="user-input" placeholder="生成したい内容を英語で入力（例: Paris with the river in the background）"></textarea>
+    <textarea id="user-input" placeholder="日本語でもOK(自動で英語に翻訳します) 例: 夜の東京の街並み、ネオンサイン"></textarea>
     <div class="row">
       <button class="btn" id="send-button" disabled>生成する</button>
-      <span class="hint">Ctrl+Enterでも生成できます / 生成は1枚ずつ順番に行われます</span>
+      <span class="hint">Ctrl+Enterでも生成できます / 生成は1枚ずつ順番に行われます / 日本語はローカル翻訳モデルで英語化されます</span>
     </div>
     <div class="bar"><div class="fill" id="bar-fill"></div></div>
   </div>
@@ -245,7 +249,8 @@
     setBar(100);
     log('準備完了。プロンプトを入力して生成してください。');
     $('send-button').disabled = false;
-    $('user-input').value = 'Paris with the river in the background';
+    // 日本語例(翻訳レイヤーのデモ)
+    $('user-input').value = '夜の街、ネオンサインが光る雨に濡れた路面';
   }
 
   async function hasFp16() {
@@ -256,6 +261,39 @@
   }
 
   let tokenizer = null;
+  let translator = null;   // { tokenizer, model } opus-mt-ja-en
+  let translatorLoading = null;
+
+  // 日本語検知: ひらがな・カタカナ・漢字・全角記号
+  const JA_RE = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uFF01-\uFF60]/;
+  const hasJapanese = (s) => JA_RE.test(s);
+
+  async function loadTranslator() {
+    if (translator) return translator;
+    if (!translatorLoading) {
+      translatorLoading = (async () => {
+        const t0 = performance.now();
+        log('翻訳モデル(opus-mt-ja-en 約80MB)を準備中… 初回のみダウンロード');
+        const tok = await AutoTokenizer.from_pretrained('Xenova/opus-mt-ja-en');
+        const mod = await AutoModelForSeq2SeqLM.from_pretrained('Xenova/opus-mt-ja-en', { quantized: true });
+        translator = { tokenizer: tok, model: mod };
+        log(`翻訳モデル準備完了 ${((performance.now() - t0) / 1000).toFixed(1)}s`);
+        return translator;
+      })();
+    }
+    return translatorLoading;
+  }
+
+  async function translateToEnglish(text) {
+    await loadTranslator();
+    const t0 = performance.now();
+    const out = await translator.model.generate(translator.tokenizer(text), {
+      max_new_tokens: 96,
+    });
+    const en = translator.tokenizer.decode(out[0], { skip_special_tokens: true });
+    log(`翻訳: "${text}" → "${en}" (${((performance.now() - t0) / 1000).toFixed(1)}s)`);
+    return en;
+  }
 
   async function generate() {
     const btn = $('send-button');
@@ -269,7 +307,8 @@
       }
       await loadingPromise;
 
-      const text = $('user-input').value.trim() || 'a scenic landscape';
+      const raw = $('user-input').value.trim() || 'a scenic landscape';
+      const text = hasJapanese(raw) ? await translateToEnglish(raw) : raw;
       const { input_ids } = await tokenizer(text, { padding: true, max_length: 77, truncation: true, return_tensor: false });
 
       const start = performance.now();
