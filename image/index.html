@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ウェブ画像生成 (SD-Turbo) — もるラボ Web AI Lab</title>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --panel: rgba(255,255,255,0.04);
+    --panel-border: rgba(255,255,255,0.09);
+    --text: #e8e8ef;
+    --text-dim: #9a9aad;
+    --accent1: #6e7bff;
+    --accent2: #37d5c8;
+    --danger: #ff6b81;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: "Segoe UI", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+    min-height: 100vh;
+  }
+  .glow { position: fixed; border-radius: 50%; filter: blur(120px); opacity: .3; pointer-events: none; z-index: 0; }
+  .glow.g1 { width: 480px; height: 480px; background: var(--accent2); top: -200px; right: -120px; }
+  main { position: relative; z-index: 1; max-width: 860px; margin: 0 auto; padding: 40px 20px 60px; }
+  a.back { color: var(--text-dim); text-decoration: none; font-size: 13px; }
+  h1 { font-size: 24px; margin: 14px 0 6px; font-weight: 700; }
+  .sub { color: var(--text-dim); font-size: 13.5px; line-height: 1.8; }
+  .panel {
+    margin-top: 24px; background: var(--panel); border: 1px solid var(--panel-border);
+    border-radius: 18px; padding: 20px; backdrop-filter: blur(8px);
+  }
+  textarea {
+    width: 100%; min-height: 84px; resize: vertical;
+    background: rgba(0,0,0,.35); color: var(--text);
+    border: 1px solid var(--panel-border); border-radius: 12px; padding: 14px;
+    font-size: 14px; font-family: inherit; line-height: 1.6; outline: none;
+  }
+  textarea:focus { border-color: rgba(110,123,255,.6); }
+  .row { display: flex; gap: 12px; margin-top: 14px; align-items: center; flex-wrap: wrap; }
+  .btn {
+    background: linear-gradient(92deg, var(--accent1), var(--accent2));
+    color: #fff; border: none; border-radius: 12px; padding: 12px 26px;
+    font-size: 14.5px; font-weight: 600; cursor: pointer;
+  }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .hint { color: var(--text-dim); font-size: 12.5px; }
+  .result { margin-top: 26px; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+  .imgwrap {
+    position: relative; border-radius: 14px; overflow: hidden;
+    border: 1px solid var(--panel-border); background: rgba(0,0,0,.35);
+    aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+  }
+  .imgwrap canvas { max-width: 100%; max-height: 100%; display: none; }
+  .imgwrap .placeholder { color: var(--text-dim); font-size: 13px; }
+  .status {
+    margin-top: 22px; background: rgba(0,0,0,.35); border: 1px solid var(--panel-border);
+    border-radius: 12px; padding: 14px 16px; font: 12.5px/1.8 Consolas, monospace;
+    color: var(--text-dim); white-space: pre-wrap; max-height: 260px; overflow-y: auto;
+  }
+  .err { color: var(--danger); }
+  .bar { height: 6px; border-radius: 3px; background: rgba(255,255,255,.08); margin-top: 14px; overflow: hidden; }
+  .bar .fill {
+    height: 100%; width: 0%; border-radius: 3px;
+    background: linear-gradient(92deg, var(--accent1), var(--accent2));
+    transition: width .3s ease;
+  }
+</style>
+<!-- tokenizer (Xenova transformers.js v2) -->
+<script type="module">
+  import { AutoTokenizer } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.js';
+  window.AutoTokenizer = AutoTokenizer;
+</script>
+</head>
+<body>
+<div class="glow g1"></div>
+<main>
+  <a class="back" href="../">← Web AI Lab トップへ</a>
+  <h1>ウェブ画像生成 <span style="font-size:13px;color:var(--text-dim);font-weight:400">SD-Turbo on WebGPU</span></h1>
+  <p class="sub">
+    あなたのブラウザの中だけで動く画像生成です。プロンプトはどこにも送信されません。
+    初回はモデル（約2.4GB）をHugging Faceからダウンロードします（2回目からはキャッシュ）。
+  </p>
+
+  <div class="panel">
+    <textarea id="user-input" placeholder="生成したい内容を英語で入力（例: Paris with the river in the background）"></textarea>
+    <div class="row">
+      <button class="btn" id="send-button" disabled>生成する</button>
+      <span class="hint">Ctrl+Enterでも生成できます / 生成は1枚ずつ順番に行われます</span>
+    </div>
+    <div class="bar"><div class="fill" id="bar-fill"></div></div>
+  </div>
+
+  <div class="result">
+    <div class="imgwrap"><canvas id="img_canvas_0"></canvas><span class="placeholder" id="ph_0">ここに画像</span></div>
+    <div class="imgwrap"><canvas id="img_canvas_1"></canvas><span class="placeholder" id="ph_1">ここに画像</span></div>
+  </div>
+
+  <div class="status" id="status">起動中… WebGPUとモデルの準備を待っています</div>
+</main>
+
+<!-- UA block for mobile (defense in depth) -->
+<script>
+  if (/Android|iPhone|iPad|iPod|Mobile|Silk/i.test(navigator.userAgent)) {
+    location.replace('../mobile-block.html');
+  }
+</script>
+
+<script type="module">
+  import ort from 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.1/dist/esm/ort.webgpu.min.js';
+
+  const MODEL_BASE = 'https://huggingface.co/schmuell/sd-turbo-ort-web/resolve/main';
+  const NUM_IMAGES = 2;
+
+  const $ = (id) => document.getElementById(id);
+  function log(msg, isErr = false) {
+    const el = $('status');
+    el.textContent += '\n' + (isErr ? '❌ ' : '') + msg;
+    el.scrollTop = el.scrollHeight;
+    if (isErr) el.classList.add('err');
+  }
+  function setBar(pct) { $('bar-fill').style.width = `${Math.max(0, Math.min(100, pct))}%`; }
+
+  /* ---- config ---- */
+  ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.1/dist/';
+  ort.env.wasm.numThreads = 1;
+  ort.env.wasm.simd = true;
+
+  const sigma = 14.6146;
+  const gamma = 0;
+  const vae_scaling_factor = 0.18215;
+
+  const models = {
+    unet: {
+      url: 'unet/model.onnx', size: 640,
+      opt: { freeDimensionOverrides: { batch_size: 1, num_channels: 4, height: 64, width: 64, sequence_length: 77 } },
+    },
+    text_encoder: {
+      url: 'text_encoder/model.onnx', size: 1700,
+      opt: { freeDimensionOverrides: { batch_size: 1 } },
+    },
+    vae_decoder: {
+      url: 'vae_decoder/model.onnx', size: 95,
+      opt: { freeDimensionOverrides: { batch_size: 1, num_channels_latent: 4, height_latent: 64, width_latent: 64 } },
+    },
+  };
+
+  const sessionOpt = {
+    executionProviders: ['webgpu'],
+    enableMemPattern: false,
+    enableCpuMemArena: false,
+    extra: {
+      session: {
+        disable_prepacking: '1',
+        use_device_allocator_for_initializers: '1',
+        use_ort_model_bytes_directly: '1',
+        use_ort_model_for_initializers: '1',
+      },
+    },
+    preferredOutputLocation: { last_hidden_state: 'gpu-buffer' },
+  };
+
+  /* ---- helpers (from MS example, MIT/Apache-2.0) ---- */
+  function randnLatents(shape, noiseSigma) {
+    let size = 1;
+    shape.forEach((e) => { size *= e; });
+    const data = new Float32Array(size);
+    for (let i = 0; i < size; i++) {
+      const u = Math.random(), v = Math.random();
+      data[i] = Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v) * noiseSigma;
+    }
+    return data;
+  }
+
+  function scaleModelInputs(data, dims) {
+    const divi = Math.sqrt(sigma ** 2 + 1);
+    const out = new Float32Array(data.length);
+    for (let i = 0; i < data.length; i++) out[i] = data[i] / divi;
+    return new ort.Tensor(out, dims);
+  }
+
+  function step(modelOutput, sampleData) {
+    const out = new Float32Array(modelOutput.data.length);
+    const sigmaHat = sigma * (gamma + 1);
+    for (let i = 0; i < modelOutput.data.length; i++) {
+      const predOriginal = sampleData[i] - sigmaHat * modelOutput.data[i];
+      const derivative = (sampleData[i] - predOriginal) / sigmaHat;
+      out[i] = (sampleData[i] + derivative * (0 - sigmaHat)) / vae_scaling_factor;
+    }
+    return out;
+  }
+
+  function drawImage(t, imageNr) {
+    const pix = t.data;
+    for (let i = 0; i < pix.length; i++) {
+      let x = pix[i] / 2 + 0.5;
+      pix[i] = x < 0 ? 0 : x > 1 ? 1 : x;
+    }
+    const imageData = t.toImageData({ tensorLayout: 'NCWH', format: 'RGB' });
+    const canvas = $(`img_canvas_${imageNr}`);
+    canvas.width = imageData.width;
+    canvas.height = imageData.height;
+    canvas.getContext('2d').putImageData(imageData, 0, 0);
+    canvas.style.display = 'block';
+    $(`ph_${imageNr}`).style.display = 'none';
+  }
+
+  /* ---- model download with progress (streams HF response into Cache Storage) ---- */
+  async function fetchAndCache(modelPath, sizeMB) {
+    const url = `${MODEL_BASE}/${modelPath}`;
+    const cache = await caches.open('sd-turbo-onnx');
+    let cached = await cache.match(url);
+    if (cached) { log(`${modelPath} (cached)`); return await cached.arrayBuffer(); }
+
+    log(`${modelPath} をダウンロード中… (${sizeMB}MB)`);
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`download failed: ${resp.status} ${modelPath}`);
+    const total = Number(resp.headers.get('content-length')) || sizeMB * 1024 * 1024;
+    const reader = resp.body.getReader();
+    const chunks = [];
+    let received = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      received += value.length;
+      setBar((received / total) * 100);
+    }
+    const blob = new Blob(chunks);
+    await cache.put(url, new Response(blob, { headers: resp.headers }));
+    log(`${modelPath} ダウンロード完了`);
+    return await blob.arrayBuffer();
+  }
+
+  let loadingPromise;
+  async function loadModels() {
+    for (const [name, model] of Object.entries(models)) {
+      const start = performance.now();
+      const bytes = await fetchAndCache(model.url, model.size);
+      const sessOpt = { ...sessionOpt, ...model.opt };
+      models[name].sess = await ort.InferenceSession.create(bytes, sessOpt);
+      log(`${model.url} セッション作成 ${((performance.now() - start) / 1000).toFixed(1)}s`);
+    }
+    setBar(100);
+    log('準備完了。プロンプトを入力して生成してください。');
+    $('send-button').disabled = false;
+    $('user-input').value = 'Paris with the river in the background';
+  }
+
+  async function hasFp16() {
+    try {
+      const adapter = await navigator.gpu.requestAdapter();
+      return adapter && adapter.features.has('shader-f16');
+    } catch { return false; }
+  }
+
+  let tokenizer = null;
+
+  async function generate() {
+    const btn = $('send-button');
+    btn.disabled = true;
+    try {
+      $('status').textContent = '生成中…';
+      if (!window.AutoTokenizer) throw new Error('tokenizerの読み込みに失敗しました（ページを再読み込みしてください）');
+      if (!tokenizer) {
+        tokenizer = await AutoTokenizer.from_pretrained('Xenova/clip-vit-base-patch16');
+        tokenizer.pad_token_id = 0;
+      }
+      await loadingPromise;
+
+      const text = $('user-input').value.trim() || 'a scenic landscape';
+      const { input_ids } = await tokenizer(text, { padding: true, max_length: 77, truncation: true, return_tensor: false });
+
+      const start = performance.now();
+      const { last_hidden_state } = await models.text_encoder.sess.run({
+        input_ids: new ort.Tensor('int32', input_ids, [1, input_ids.length]),
+      });
+      let perf = [`text_encoder: ${((performance.now() - start) / 1000).toFixed(1)}s`];
+
+      for (let j = 0; j < NUM_IMAGES; j++) {
+        const latentShape = [1, 4, 64, 64];
+        const latentData = randnLatents(latentShape, sigma);
+        const latentInput = scaleModelInputs(latentData, latentShape);
+
+        let t0 = performance.now();
+        const { out_sample } = await models.unet.sess.run({
+          sample: latentInput,
+          timestep: new ort.Tensor('int64', [999n], [1]),
+          encoder_hidden_states: last_hidden_state,
+        });
+        perf.push(`unet(${j + 1}): ${((performance.now() - t0) / 1000).toFixed(1)}s`);
+
+        const newLatentsData = step(out_sample, latentData);
+
+        t0 = performance.now();
+        const { sample } = await models.vae_decoder.sess.run({
+          latent_sample: new ort.Tensor(newLatentsData, latentShape),
+        });
+        perf.push(`vae(${j + 1}): ${((performance.now() - t0) / 1000).toFixed(1)}s`);
+
+        drawImage(sample, j);
+      }
+      last_hidden_state.dispose();
+      log(perf.join(', '));
+      log('完了 ✔');
+    } catch (e) {
+      log(String(e), true);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  $('send-button').addEventListener('click', generate);
+  $('user-input').addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.key === 'Enter') generate();
+  });
+
+  if (!('gpu' in navigator)) {
+    log('このブラウザはWebGPUに対応していません。Chrome / Edge の最新版をお使いください。', true);
+  } else {
+    loadingPromise = hasFp16().then((fp16) => {
+      if (fp16) return loadModels();
+      log('GPUまたはブラウザがWebGPU/f16に対応していません。', true);
+      throw new Error('no fp16');
+    });
+  }
+</script>
+</body>
+</html>
