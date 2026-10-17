@@ -1,2 +1,0 @@
-var e=()=>`CPU (conservative starting point)`,t=()=>`Generated audio`,n=()=>`Model default`,r=()=>`Use selected runtime profile (experimental)`;export{e as i,n,t as r,r as t};
-//# sourceMappingURL=zh-Hans-BJ6c1q7P.js.map

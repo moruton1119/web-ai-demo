@@ -1,2 +1,0 @@
-var e={ar:()=>`Contraer contenido`,at:()=>`Referencia de imagen generada`,au:()=>`Mostrar contenido`,av:()=>`Contenido de texto oculto`};export{e as default};
-//# sourceMappingURL=25b0ae4709a560e4-Bg3eAU-v.js.map

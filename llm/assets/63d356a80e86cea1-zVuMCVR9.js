@@ -1,2 +1,0 @@
-var e={VK:({chatTitle:e})=>{switch(e.type){case`titled`:return`聊天“${e.value}”已删除`;case`untitled`:return`聊天“未命名”已删除`;default:return e}},VL:()=>`撤销`};export{e as default};
-//# sourceMappingURL=63d356a80e86cea1-zVuMCVR9.js.map

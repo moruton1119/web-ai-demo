@@ -1,2 +1,0 @@
-var e={tg:()=>`Ocultar proceso de pensamiento`,th:()=>`Mostrar proceso de pensamiento`,ti:()=>`Pensando...`,tj:()=>`Proceso de pensamiento`};export{e as default};
-//# sourceMappingURL=f9d36b200291d0dc-CHuanMKO.js.map

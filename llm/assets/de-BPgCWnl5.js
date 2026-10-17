@@ -1,2 +1,0 @@
-var e=()=>`Die vorgeschlagenen Dateien konnten nicht ausgewählt werden. Prüfen Sie den Download-Inhalt oder wählen Sie Dateien über die Repository-Eingabe.`;export{e as t};
-//# sourceMappingURL=de-BPgCWnl5.js.map

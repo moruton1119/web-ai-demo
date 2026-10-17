@@ -1,2 +1,0 @@
-var e={Mh:()=>`Apply only this setting`,Mi:()=>`Applies to the next generation`,MP:()=>`Current value`,NT:()=>`Recommended`,Ov:()=>`Starting value`};export{e as default};
-//# sourceMappingURL=6924f6879cc3f7f0-CXIWIVEK.js.map

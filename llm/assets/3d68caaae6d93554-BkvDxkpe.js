@@ -1,2 +1,0 @@
-var e={jA:()=>`Download`,jB:()=>`Download options`,jC:()=>`Applies to the downloaded copy. Saved images stay unchanged.`,jD:()=>`Image format`,jE:()=>`Embed generation settings`};export{e as default};
-//# sourceMappingURL=3d68caaae6d93554-BkvDxkpe.js.map

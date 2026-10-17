@@ -1,2 +1,0 @@
-var e=()=>`Escolher uma conexão salva`,t=()=>`Primeiro, ative o Naidan RPC nas configurações de desenvolvedor.`,n=()=>`Abrir as configurações do Naidan RPC`;export{t as n,e as r,n as t};
-//# sourceMappingURL=pt-BR-BsSaF0av.js.map

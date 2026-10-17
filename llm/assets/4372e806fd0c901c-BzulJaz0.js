@@ -1,2 +1,0 @@
-var e={se:()=>`Changes apply to this browser session only while Tool config persistence is disabled.`,sf:()=>`Failed to save Chat tool settings.`};export{e as default};
-//# sourceMappingURL=4372e806fd0c901c-BzulJaz0.js.map
